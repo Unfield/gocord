@@ -23,6 +23,10 @@ type Gateway struct {
 
 	Token   string
 	Intents int
+
+	sessionID string
+	lastSeq   *int
+	resuming  bool
 }
 
 func New() *Gateway {
@@ -58,6 +62,7 @@ func (g *Gateway) listen(ctx context.Context) {
 				return
 			}
 			log.Printf("[Gateway] Read error: %v", err)
+			g.handleDisconnect()
 			return
 		}
 
@@ -67,11 +72,31 @@ func (g *Gateway) listen(ctx context.Context) {
 			continue
 		}
 
+		if payload.S != nil {
+			g.lastSeq = payload.S
+		}
+
+		if payload.T != nil && *payload.T == "READY" {
+			dataMap, ok := payload.D.(map[string]any)
+			if ok {
+				if sid, ok := dataMap["session_id"].(string); ok {
+					g.sessionID = sid
+					log.Printf("[Gateway] Session ID: %s", sid)
+				}
+			}
+		}
+
 		switch payload.Op {
 		case 10:
 			g.handleHello(payload.D)
+
 		case 11:
 			log.Println("[Gateway] ⇐ Heartbeat ACK")
+
+		case 7:
+			log.Println("[Gateway] ⇐ Reconnect requested by Discord")
+			g.handleReconnect(ctx)
+
 		default:
 			if g.OnEvent != nil {
 				g.OnEvent(&payload)
@@ -112,4 +137,41 @@ func (g *Gateway) Close() {
 	}
 
 	log.Println("[Gateway] Closed")
+}
+
+func (g *Gateway) handleDisconnect() {
+	log.Println("[Gateway] Lost connection, attempting to reconnect")
+	go func() {
+		time.Sleep(time.Second * 5)
+		g.reconnect(context.Background())
+	}()
+}
+
+func (g *Gateway) handleReconnect(ctx context.Context) {
+	log.Println("[Gateway] Discord requested reconnect")
+	g.reconnect(ctx)
+}
+
+func (g *Gateway) reconnect(ctx context.Context) {
+	g.Close()
+
+	err := g.Connect(ctx)
+	if err != nil {
+		log.Printf("[Gateway] Reconnect failed: %v", err)
+		return
+	}
+
+	if g.sessionID != "" && g.lastSeq != nil {
+		g.resuming = true
+		if err := g.Resume(); err == nil {
+			log.Println("[Gateway] Sent resume request")
+		} else {
+			log.Printf("[Gateway] Resume failed: %v, identifying instead", err)
+			_ = g.Identify(g.Token, g.Intents)
+			g.resuming = false
+		}
+	} else {
+		log.Println("[Gateway] No session to resume, re-identifying")
+		_ = g.Identify(g.Token, g.Intents)
+	}
 }
