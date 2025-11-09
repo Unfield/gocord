@@ -27,10 +27,14 @@ type Gateway struct {
 	sessionID string
 	lastSeq   *int
 	resuming  bool
+
+	Dispatcher *Dispatcher
 }
 
 func New() *Gateway {
-	return &Gateway{}
+	return &Gateway{
+		Dispatcher: NewDispatcher(),
+	}
 }
 
 func (g *Gateway) Connect(ctx context.Context) error {
@@ -98,7 +102,9 @@ func (g *Gateway) listen(ctx context.Context) {
 			g.handleReconnect(ctx)
 
 		default:
-			if g.OnEvent != nil {
+			if payload.T != nil && g.Dispatcher != nil {
+				g.Dispatcher.dispatch(*payload.T, payload.D)
+			} else if g.OnEvent != nil {
 				g.OnEvent(&payload)
 			}
 		}
