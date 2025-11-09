@@ -1,6 +1,6 @@
 package gateway
 
-import "github.com/Unfield/Gocord/types"
+import "github.com/Unfield/gocord/types"
 
 const (
 	MESSAGE_CREATE_EVENT = "MESSAGE_CREATE"
