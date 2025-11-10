@@ -28,13 +28,16 @@ type Gateway struct {
 	lastSeq   *int
 	resuming  bool
 
-	Dispatcher *Dispatcher
+	Dispatcher *TypedDispatcher
 }
 
 func New() *Gateway {
-	return &Gateway{
-		Dispatcher: NewDispatcher(),
+	gw := &Gateway{
+		Dispatcher: NewTypedDispatcher(),
 	}
+	RegisterType[ReadyEvent](gw.Dispatcher, EventReady)
+	RegisterType[MessageCreateEvent](gw.Dispatcher, EventMessageCreate)
+	return gw
 }
 
 func (g *Gateway) Connect(ctx context.Context) error {
@@ -103,7 +106,7 @@ func (g *Gateway) listen(ctx context.Context) {
 
 		default:
 			if payload.T != nil && g.Dispatcher != nil {
-				g.Dispatcher.dispatch(*payload.T, payload.D)
+				g.Dispatcher.dispatch(EventName(*payload.T), payload.D)
 			} else if g.OnEvent != nil {
 				g.OnEvent(&payload)
 			}
