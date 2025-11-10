@@ -1,8 +1,10 @@
 package types
 
 type User struct {
-	ID       string `json:"id"`
-	Username string `json:"username"`
+	ID         string `json:"id"`
+	Username   string `json:"username"`
+	GlobalName string `json:"global_name"`
+	IsBot      bool   `json:"bot"`
 }
 
 type Message struct {
